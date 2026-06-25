@@ -1,6 +1,6 @@
-# 🗡️ TBH Save Inspector & Stat Simulator
+# 🗡️ Taskbar Hero — Save Inspector & Stat Simulator
 
-> Ferramenta criada entre amigos para facilitar a vida na hora de montar o personagem perfeito em **The Bazaar of Heroes** (TBH).
+> Ferramenta criada entre amigos para facilitar a vida na hora de montar o personagem perfeito em **Taskbar Hero**.
 
 ---
 
@@ -36,13 +36,13 @@ Você carrega o arquivo de save do seu jogo, e ela mostra **tudo sobre seu perso
 
 ## 🔍 Como encontrar o arquivo de save
 
-O arquivo de save geralmente fica numa pasta como esta (Windows):
+O arquivo de save do **Taskbar Hero** fica neste caminho (Windows):
 
 ```
-C:\Users\SEU_USUARIO\AppData\LocalLow\NomeDoJogo\
+C:\Users\SEU_USUARIO\AppData\LocalLow\TesseractStudio\TaskbarHero\SaveFile_Live.es3
 ```
 
-Procure por um arquivo com extensão `.sav` ou `.json` — é esse que você vai carregar.
+Substitua `SEU_USUARIO` pelo seu nome de usuário do Windows. É esse arquivo `.es3` que você vai carregar na ferramenta.
 
 ---
 
