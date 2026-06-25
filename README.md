@@ -70,4 +70,4 @@ Feito com HTML, CSS e JavaScript puro + Vite. Sem banco de dados, sem conta, sem
 
 ---
 
-*Feito com ❤️ pelo grupo de amigos TBH enjoyers 🎮*
+*Feito por Wellington Costa*
