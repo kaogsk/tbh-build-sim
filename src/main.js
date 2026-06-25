@@ -1591,11 +1591,11 @@ function calculateFinalStats(saveState) {
   // 3. Process rune tree levels
   // RuneSaveData: [{ RuneKey, Level }]. Each RuneKey maps to a node in rune_tree.nodes.
   // Each node has levels[] with per-level stat/value entries.
-  const runeNodes = (wiki_db['/data/rune_tree.json'] || {}).nodes || {};
+  const runeNodes = (wiki_db['/data/rune_tree.json'] || {}).nodes || [];
   const runeSaveData = saveState.runes || [];
 
   runeSaveData.forEach(runeEntry => {
-    const node = runeNodes[String(runeEntry.RuneKey)];
+    const node = runeNodes.find(n => n.key === runeEntry.RuneKey);
     if (!node || !node.levels || runeEntry.Level <= 0) return;
 
     // Sum the stat value for all invested levels
@@ -1646,9 +1646,10 @@ function calculateFinalStats(saveState) {
   // Final display: total % including base
   finalStats.AttackSpeed = rawStats.AttackSpeed.flat + rawStats.AttackSpeed.additive / 10;
   
-  // Basic Attack DPS = AttackDamage * (AttackSpeed / 100)
-  // AttackSpeed of 150% means 1.5 attacks per second (game baseline = 1 attack/s at 100%)
-  finalStats.BasicAttackDPS = finalStats.AttackDamage * (finalStats.AttackSpeed / 100);
+  // Basic Attack DPS = AttackDamage * (AttackSpeed / divisor)
+  // Bow has a base animation speed divisor of 130 instead of 100
+  const divisor = (heroInfo && heroInfo.MainWeaponGearType === 'BOW') ? 130 : 100;
+  finalStats.BasicAttackDPS = finalStats.AttackDamage * (finalStats.AttackSpeed / divisor);
 
   finalStats.CastSpeed = rawStats.CastSpeed.flat + rawStats.CastSpeed.additive / 10;
   
@@ -1714,6 +1715,14 @@ function addStatValue(rawStats, type, val, modType) {
       rawStats[type].flat += numVal;
     }
     // Also apply to AttackDamage as an additive % bonus
+    targetType = 'AttackDamage';
+    modType = 'ADDITIVE';
+  }
+
+  if (type === 'IncreaseProjectileDamage') {
+    if (rawStats[type]) {
+      rawStats[type].additive += numVal;
+    }
     targetType = 'AttackDamage';
     modType = 'ADDITIVE';
   }
