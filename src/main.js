@@ -79,6 +79,7 @@ const TRANSLATIONS = {
     slot_9: "Bracer",
     // Stat labels
     stats_AttackDamage: "Attack Damage",
+    stats_BasicAttackDPS: "Basic Attack DPS",
     stats_AttackSpeed: "Attack Speed",
     stats_CastSpeed: "Cast Speed",
     stats_CriticalChance: "Critical Chance",
@@ -172,6 +173,7 @@ const TRANSLATIONS = {
     slot_9: "Bracelete",
     // Stat labels
     stats_AttackDamage: "Dano de Ataque",
+    stats_BasicAttackDPS: "DPS de Ataque Básico",
     stats_AttackSpeed: "Velocidade de Ataque",
     stats_CastSpeed: "Velocidade de Conjuração",
     stats_CriticalChance: "Chance Crítica",
@@ -455,6 +457,9 @@ function processFile(file) {
       // Extract Ranger attributes
       const rangerAttrs = playerSave.attributeSaveDatas.filter(attr => strStartsWith(attr.Key, '201'));
       
+      // Extract rune levels (global, not per-hero)
+      const runeSaveData = playerSave.RuneSaveData || [];
+      
       // Extract gold
       const goldObj = playerSave.currenySaveDatas.find(c => c.Key === 100001);
       const gold = goldObj ? goldObj.Quantity : 0;
@@ -463,6 +468,7 @@ function processFile(file) {
         ranger,
         equipped_items: equippedItems,
         attributes: rangerAttrs,
+        runes: runeSaveData,
         gold
       };
       
@@ -1364,6 +1370,7 @@ function calculateAndRender() {
   
   const statsKeys = [
     { key: 'AttackDamage', label: TRANSLATIONS[activeLanguage].stats_AttackDamage || 'Attack Damage', isPercent: false },
+    { key: 'BasicAttackDPS', label: TRANSLATIONS[activeLanguage].stats_BasicAttackDPS || 'Basic Attack DPS', isPercent: false },
     { key: 'AttackSpeed', label: TRANSLATIONS[activeLanguage].stats_AttackSpeed || 'Attack Speed', isPercent: true },
     { key: 'CastSpeed', label: TRANSLATIONS[activeLanguage].stats_CastSpeed || 'Cast Speed', isPercent: true },
     { key: 'CriticalChance', label: TRANSLATIONS[activeLanguage].stats_CriticalChance || 'Critical Chance', isPercent: true },
@@ -1484,6 +1491,8 @@ function calculateFinalStats(saveState) {
     IncreaseAreaOfEffectDamage: { flat: 0, additive: 0 },
     
     // Detailed stats
+    // Note: PhysicalDamagePercent and elemental damage use FLAT modtype in the wiki
+    // so we accumulate both flat and additive and sum them together
     PhysicalDamagePercent: { flat: 0, additive: 0 },
     FireDamagePercent: { flat: 0, additive: 0 },
     ColdDamagePercent: { flat: 0, additive: 0 },
@@ -1559,21 +1568,18 @@ function calculateFinalStats(saveState) {
     
     if (attrInfo && attrInfo.type === 'PASSIVESKILL' && attr.Level > 0) {
       const pass = attrInfo.passive;
-      // Passive values are strings like "+150" or "+40"
       const val = parseInt(pass.value.replace('+', '').replace('-', ''));
       const totalVal = val * attr.Level;
       
-      // Determine if flat or additive
       const isPercent = pass.stat.endsWith('Percent') || 
                         pass.stat.indexOf('Chance') !== -1 || 
                         pass.stat.indexOf('Speed') !== -1 || 
                         pass.stat.indexOf('Leech') !== -1 || 
                         pass.stat.indexOf('Reduction') !== -1 ||
                         pass.stat.indexOf('Resistance') !== -1 ||
-                        pass.stat.indexOf('Damage') !== -1; // passives add % damage
+                        pass.stat.indexOf('Damage') !== -1;
       
       if (pass.stat === 'AttackDamage' && pass.value === '+1') {
-        // Flat damage
         addStatValue(rawStats, 'AttackDamage', totalVal, 'FLAT');
       } else {
         const modType = isPercent ? 'ADDITIVE' : 'FLAT';
@@ -1581,68 +1587,101 @@ function calculateFinalStats(saveState) {
       }
     }
   });
+
+  // 3. Process rune tree levels
+  // RuneSaveData: [{ RuneKey, Level }]. Each RuneKey maps to a node in rune_tree.nodes.
+  // Each node has levels[] with per-level stat/value entries.
+  const runeNodes = (wiki_db['/data/rune_tree.json'] || {}).nodes || {};
+  const runeSaveData = saveState.runes || [];
+
+  runeSaveData.forEach(runeEntry => {
+    const node = runeNodes[String(runeEntry.RuneKey)];
+    if (!node || !node.levels || runeEntry.Level <= 0) return;
+
+    // Sum the stat value for all invested levels
+    // Each level entry gives a fixed value per level tick
+    let totalValue = 0;
+    for (let lvl = 1; lvl <= runeEntry.Level && lvl <= node.levels.length; lvl++) {
+      const levelData = node.levels.find(l => l.level === lvl) || node.levels[lvl - 1];
+      if (levelData) totalValue += levelData.value;
+    }
+
+    if (totalValue === 0) return;
+
+    const stat = node.stat;
+    // Determine mod type: percent stats are ADDITIVE, flat stats are FLAT
+    const isPercent = stat.endsWith('Percent') ||
+                      stat.includes('Speed') ||
+                      stat.includes('Chance') ||
+                      stat.includes('Leech') ||
+                      stat.includes('Reduction');
+    const modType = isPercent ? 'ADDITIVE' : 'FLAT';
+
+    addStatValue(rawStats, stat, totalValue, modType);
+  });
   
   // 3. Final calculations combining flat and additive
   const finalStats = {};
   
-  // Flat damage scales by additive % damage
-  // divisor is 1000 since additive values are multiplied by 10 (e.g. +486 = +48.6%)
-  finalStats.AttackDamage = (rawStats.AttackDamage.flat) * (1 + rawStats.AttackDamage.additive / 1000);
+  // Physical/Elemental damage % uses FLAT modtype in wiki_db.
+  // We accumulate both flat+additive and divide by 10 (stored as val*10 = e.g. 500 = 50%)
+  const physPct = (rawStats.PhysicalDamagePercent.flat + rawStats.PhysicalDamagePercent.additive) / 10;
+  const firePct  = (rawStats.FireDamagePercent.flat  + rawStats.FireDamagePercent.additive)  / 10;
+  const coldPct  = (rawStats.ColdDamagePercent.flat  + rawStats.ColdDamagePercent.additive)  / 10;
+  const lightPct = (rawStats.LightningDamagePercent.flat + rawStats.LightningDamagePercent.additive) / 10;
+  const chaosPct = (rawStats.ChaosDamagePercent.flat + rawStats.ChaosDamagePercent.additive) / 10;
+  // Total elemental/physical bonus already folded into AttackDamage.additive by addStatValue.
+  // But we expose them individually for the stats panel.
+  finalStats.PhysicalDamagePercent   = physPct;
+  finalStats.FireDamagePercent       = firePct;
+  finalStats.ColdDamagePercent       = coldPct;
+  finalStats.LightningDamagePercent  = lightPct;
+  finalStats.ChaosDamagePercent      = chaosPct;
+
+  // Flat attack damage scales by total additive % bonus
+  // additive is stored multiplied by 10: +1000 = +100%, divisor = 1000
+  finalStats.AttackDamage = rawStats.AttackDamage.flat * (1 + rawStats.AttackDamage.additive / 1000);
   
-  // AttackSpeed base is 100% plus additive speed percentage
+  // AttackSpeed: base stored as 100 (= 100%). Additive gems add e.g. +200 = +20%.
+  // Final display: total % including base
   finalStats.AttackSpeed = rawStats.AttackSpeed.flat + rawStats.AttackSpeed.additive / 10;
   
+  // Basic Attack DPS = AttackDamage * (AttackSpeed / 100)
+  // AttackSpeed of 150% means 1.5 attacks per second (game baseline = 1 attack/s at 100%)
+  finalStats.BasicAttackDPS = finalStats.AttackDamage * (finalStats.AttackSpeed / 100);
+
   finalStats.CastSpeed = rawStats.CastSpeed.flat + rawStats.CastSpeed.additive / 10;
   
-  // CriticalChance is additive flat percentage
   finalStats.CriticalChance = (rawStats.CriticalChance.flat + rawStats.CriticalChance.additive) / 10;
-  
-  // CriticalDamage is flat base plus additions
   finalStats.CriticalDamage = (rawStats.CriticalDamage.flat + rawStats.CriticalDamage.additive) / 10;
   
-  // Max HP scales by additive max HP percentage
-  finalStats.MaxHp = (rawStats.MaxHp.flat) * (1 + rawStats.MaxHp.additive / 1000);
-  
-  // Armor scales by additive armor percentage
-  finalStats.Armor = (rawStats.Armor.flat) * (1 + rawStats.Armor.additive / 1000);
+  finalStats.MaxHp = rawStats.MaxHp.flat * (1 + rawStats.MaxHp.additive / 1000);
+  finalStats.Armor = rawStats.Armor.flat * (1 + rawStats.Armor.additive / 1000);
   
   finalStats.CooldownReduction = (rawStats.CooldownReduction.flat + rawStats.CooldownReduction.additive) / 10;
-  
-  // MovementSpeed scales by additive movement speed percentage
-  finalStats.MovementSpeed = (rawStats.MovementSpeed.flat) * (1 + rawStats.MovementSpeed.additive / 1000);
+  finalStats.MovementSpeed = rawStats.MovementSpeed.flat * (1 + rawStats.MovementSpeed.additive / 1000);
   
   finalStats.HpLeech = (rawStats.HpLeech.flat + rawStats.HpLeech.additive) / 10;
-  
-  finalStats.IncreaseProjectileDamage = rawStats.IncreaseProjectileDamage.additive / 10;
-  
-  finalStats.IncreaseAreaOfEffectDamage = rawStats.IncreaseAreaOfEffectDamage.additive / 10;
-  
-  // Detailed stats final values
-  finalStats.PhysicalDamagePercent = rawStats.PhysicalDamagePercent.additive / 10;
-  finalStats.FireDamagePercent = rawStats.FireDamagePercent.additive / 10;
-  finalStats.ColdDamagePercent = rawStats.ColdDamagePercent.additive / 10;
-  finalStats.LightningDamagePercent = rawStats.LightningDamagePercent.additive / 10;
-  finalStats.ChaosDamagePercent = rawStats.ChaosDamagePercent.additive / 10;
+  finalStats.IncreaseProjectileDamage = (rawStats.IncreaseProjectileDamage.flat + rawStats.IncreaseProjectileDamage.additive) / 10;
+  finalStats.IncreaseAreaOfEffectDamage = (rawStats.IncreaseAreaOfEffectDamage.flat + rawStats.IncreaseAreaOfEffectDamage.additive) / 10;
 
-  finalStats.HpRegenPerSec = rawStats.HpRegenPerSec.flat / 10;
-  finalStats.AddHpPerHit = rawStats.AddHpPerHit.flat;
-  finalStats.AddHpPerKill = rawStats.AddHpPerKill.flat;
+  finalStats.HpRegenPerSec = (rawStats.HpRegenPerSec.flat + rawStats.HpRegenPerSec.additive) / 10;
+  finalStats.AddHpPerHit = rawStats.AddHpPerHit.flat + rawStats.AddHpPerHit.additive;
+  finalStats.AddHpPerKill = rawStats.AddHpPerKill.flat + rawStats.AddHpPerKill.additive;
 
   finalStats.DodgeChance = (rawStats.DodgeChance.flat + rawStats.DodgeChance.additive) / 10;
   finalStats.ElementalDodgeChance = (rawStats.ElementalDodgeChance.flat + rawStats.ElementalDodgeChance.additive) / 10;
-
   finalStats.BlockChance = (rawStats.BlockChance.flat + rawStats.BlockChance.additive) / 10;
   finalStats.ElementalBlockChance = (rawStats.ElementalBlockChance.flat + rawStats.ElementalBlockChance.additive) / 10;
 
-  finalStats.FireResistance = rawStats.FireResistance.flat;
-  finalStats.ColdResistance = rawStats.ColdResistance.flat;
-  finalStats.LightningResistance = rawStats.LightningResistance.flat;
-  finalStats.ChaosResistance = rawStats.ChaosResistance.flat;
+  finalStats.FireResistance = rawStats.FireResistance.flat + rawStats.FireResistance.additive;
+  finalStats.ColdResistance = rawStats.ColdResistance.flat + rawStats.ColdResistance.additive;
+  finalStats.LightningResistance = rawStats.LightningResistance.flat + rawStats.LightningResistance.additive;
+  finalStats.ChaosResistance = rawStats.ChaosResistance.flat + rawStats.ChaosResistance.additive;
 
   finalStats.DamageReduction = (rawStats.DamageReduction.flat + rawStats.DamageReduction.additive) / 10;
-
-  finalStats.AdditionalGold = rawStats.AdditionalGold.additive / 10;
-  finalStats.AdditionalExp = rawStats.AdditionalExp.additive / 10;
+  finalStats.AdditionalGold = (rawStats.AdditionalGold.flat + rawStats.AdditionalGold.additive) / 10;
+  finalStats.AdditionalExp = (rawStats.AdditionalExp.flat + rawStats.AdditionalExp.additive) / 10;
 
   return finalStats;
 }
@@ -1662,20 +1701,19 @@ function addStatValue(rawStats, type, val, modType) {
   if (type === 'IncreaseExpAmount') targetType = 'AdditionalExp';
   if (type === 'HealthRegen') targetType = 'HpRegenPerSec';
   
-  // Double-apply elemental/physical damage to AttackDamage and their respective details
+  // Elemental/physical damage % — accumulate into their own bucket AND into AttackDamage.additive
+  // The wiki uses MODTYPE=FLAT for these, but they are percentage bonuses (value 500 = +50%)
+  // We keep them in their specific bucket for the stats panel, and also add them to AttackDamage.additive
   if (type === 'PhysicalDamagePercent' || 
       type === 'FireDamagePercent' || 
       type === 'ColdDamagePercent' || 
       type === 'LightningDamagePercent' || 
       type === 'ChaosDamagePercent') {
     if (rawStats[type]) {
-      const mod = (modType || '').toUpperCase();
-      if (mod === 'ADDITIVE') {
-        rawStats[type].additive += numVal;
-      } else {
-        rawStats[type].flat += numVal;
-      }
+      // Always accumulate into .flat bucket since MODTYPE is FLAT in wiki
+      rawStats[type].flat += numVal;
     }
+    // Also apply to AttackDamage as an additive % bonus
     targetType = 'AttackDamage';
     modType = 'ADDITIVE';
   }
