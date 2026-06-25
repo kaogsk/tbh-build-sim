@@ -1,6 +1,6 @@
-# 🗡️ Taskbar Hero — Save Inspector & Stat Simulator
+# 🗡️ Task bar Hero — Save Inspector & Stat Simulator
 
-> Ferramenta criada entre amigos para facilitar a vida na hora de montar o personagem perfeito em **Taskbar Hero**.
+> Ferramenta criada entre amigos para facilitar a vida na hora de montar o personagem perfeito em **Task bar Hero**.
 
 ---
 
