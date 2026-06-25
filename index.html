@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TBH Save Inspector & Stat Simulator</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="app" class="app-container">
+      <!-- Top Navigation Header -->
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="brand">
+            <span class="brand-text">TBH <small data-i18n="title">Save Inspector & Simulator</small></span>
+          </div>
+          <div class="save-loader-area header-actions">
+            <select id="lang-select" class="lang-select">
+              <option value="en">EN</option>
+              <option value="pt">PT-BR</option>
+            </select>
+            <label for="save-file-input" class="btn-import" id="btn-import-label">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+              </svg>
+              <span data-i18n="importBtn">Import SaveFile_Live.es3</span>
+            </label>
+            <input type="file" id="save-file-input" accept=".es3,.bak" style="display: none;" />
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Layout -->
+      <main class="main-layout">
+        <!-- Drag & Drop Overlay / Initial Screen -->
+        <section class="upload-dropzone" id="upload-dropzone">
+          <div class="dropzone-box">
+            <div class="dropzone-icon">📥</div>
+            <h2 data-i18n="dropzoneTitle">Import your Save File to Start</h2>
+            <p class="dropzone-desc" data-i18n="dropzoneDesc">Drag & drop your <code>SaveFile_Live.es3</code> here or click the button above.</p>
+            <p class="file-path-hint">Default Windows path: <br><code>%USERPROFILE%\AppData\LocalLow\TesseractStudio\TaskbarHero\SaveFile_Live.es3</code></p>
+            
+            <div class="or-divider"><span>OR</span></div>
+            <button class="btn-demo" id="btn-demo-load" data-i18n="demoBtn">Load Demo Save Data</button>
+          </div>
+        </section>
+
+        <!-- Editor Dashboard (hidden until file is loaded) -->
+        <section class="dashboard" id="dashboard" style="display: none;">
+          
+          <!-- Column 1: Character Stats & Attributes -->
+          <div class="panel col-stats">
+            <div class="panel-header">
+              <h3 data-i18n="charHeader">Explorer Character</h3>
+              <span class="char-level" id="char-level">Lvl 101</span>
+            </div>
+            
+            <div class="panel-body">
+              <!-- Currencies -->
+              <div class="currency-row">
+                <div class="currency-item">
+                  <span class="currency-icon">🪙</span>
+                  <span class="currency-value" id="currency-gold">0</span>
+                </div>
+              </div>
+
+              <!-- Stat Comparison Matrix -->
+              <div class="stats-container">
+                <div class="stats-header-row">
+                  <span data-i18n="attribute">Attribute</span>
+                  <span class="text-right" data-i18n="original">Original</span>
+                  <span class="text-right" data-i18n="simulated">Simulated</span>
+                </div>
+                
+                <div class="stats-list" id="stats-list-container">
+                  <!-- Stats will be populated dynamically -->
+                </div>
+              </div>
+
+              <!-- Detailed Stats Summary -->
+              <div class="attributes-summary">
+                <h4 data-i18n="detailedStats">Detailed Stats</h4>
+                <div class="stats-container">
+                  <div class="stats-header-row">
+                    <span data-i18n="attribute">Attribute</span>
+                    <span class="text-right" data-i18n="original">Original</span>
+                    <span class="text-right" data-i18n="simulated">Simulated</span>
+                  </div>
+                  <div class="stats-list" id="detailed-stats-list-container">
+                    <!-- Stats will be populated dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2: Equipment Grid -->
+          <div class="panel col-gear">
+            <div class="panel-header">
+              <h3 data-i18n="inventoryHeader">Equipment Inventory</h3>
+              <button class="btn-reset" id="btn-reset-gear" data-i18n="resetBtn">Reset Sockets</button>
+            </div>
+            <div class="panel-body">
+              <div class="gear-grid">
+                <!-- Weapon -->
+                <div class="gear-slot" data-slot="0" id="slot-0">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Weapon</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-0"></div>
+                </div>
+
+                <!-- Offhand -->
+                <div class="gear-slot" data-slot="1" id="slot-1">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Offhand</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-1"></div>
+                </div>
+
+                <!-- Helmet -->
+                <div class="gear-slot" data-slot="2" id="slot-2">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Helmet</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-2"></div>
+                </div>
+
+                <!-- Armor -->
+                <div class="gear-slot" data-slot="3" id="slot-3">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Armor</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-3"></div>
+                </div>
+
+                <!-- Gloves -->
+                <div class="gear-slot" data-slot="4" id="slot-4">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Gloves</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-4"></div>
+                </div>
+
+                <!-- Boots -->
+                <div class="gear-slot" data-slot="5" id="slot-5">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Boots</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-5"></div>
+                </div>
+
+                <!-- Pendant -->
+                <div class="gear-slot" data-slot="6" id="slot-6">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Pendant</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-6"></div>
+                </div>
+
+                <!-- Earring -->
+                <div class="gear-slot" data-slot="7" id="slot-7">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Earring</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-7"></div>
+                </div>
+
+                <!-- Ring -->
+                <div class="gear-slot" data-slot="8" id="slot-8">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Ring</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-8"></div>
+                </div>
+
+                <!-- Bracer -->
+                <div class="gear-slot" data-slot="9" id="slot-9">
+                  <div class="slot-icon-container"><img class="slot-icon" src="" alt="" /></div>
+                  <div class="slot-info">
+                    <span class="slot-type-label">Bracer</span>
+                    <span class="slot-item-name">Empty</span>
+                  </div>
+                  <div class="slot-socket-dots" id="dots-9"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 3: Sockets Editor -->
+          <div class="panel col-editor">
+            <div class="panel-header">
+              <h3 data-i18n="editorHeader">Socket Editor</h3>
+            </div>
+            <div class="panel-body" id="editor-body">
+              <div class="no-selection-msg" id="no-selection-msg">
+                <span class="editor-icon">🛠️</span>
+                <p data-i18n="editorNoSelection">Select an equipped item to edit its sockets and simulate modifications.</p>
+              </div>
+              
+              <!-- Item Details (Shown when selected) -->
+              <div class="item-detail-view" id="item-detail-view" style="display: none;">
+                <div class="item-detail-header">
+                  <div class="detail-icon-box" id="detail-item-icon-box">
+                    <img class="detail-item-icon" id="detail-item-icon" src="" alt="" />
+                  </div>
+                  <div class="detail-name-box">
+                    <h4 id="detail-item-name">Dimensional Quiver</h4>
+                    <span class="detail-item-grade" id="detail-item-grade">IMMORTAL</span>
+                  </div>
+                  <button class="btn-change-item" id="btn-change-item" data-i18n="changeItemBtn">Change Item</button>
+                </div>
+                
+                <!-- Base / Inherent Stats -->
+                <div class="item-stats-section">
+                  <h5 data-i18n="itemAttrs">Item Attributes</h5>
+                  <ul class="item-stats-list" id="detail-item-stats">
+                    <!-- Populated dynamically -->
+                  </ul>
+                </div>
+
+                <!-- Sockets Editor List -->
+                <div class="item-sockets-section">
+                  <h5 data-i18n="socketsConfig">Sockets Configuration</h5>
+                  <div class="sockets-editor-list" id="detail-sockets-list">
+                    <!-- Sockets populated dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Socket Selection Modal -->
+      <div class="modal-overlay" id="socket-modal" style="display: none;">
+        <div class="modal-box">
+          <div class="modal-header">
+            <h3 id="modal-title">Select Material</h3>
+            <button class="btn-close-modal" id="btn-close-modal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <!-- Filter buttons -->
+            <div class="modal-filters">
+              <button class="filter-chip active" data-type="all" data-i18n="filterAll">All</button>
+              <button class="filter-chip" data-type="DECORATION" data-i18n="filterDeco">Decoration (Gems)</button>
+              <button class="filter-chip" data-type="ENGRAVING" data-i18n="filterEng">Engraving</button>
+              <button class="filter-chip" data-type="INSCRIPTION" data-i18n="filterIns">Inscription</button>
+            </div>
+            <!-- Search input -->
+            <div class="modal-search-box">
+              <input type="text" id="modal-search-input" placeholder="Search material by name..." data-i18n-placeholder="modalSearchPlaceholder" autocomplete="off" spellcheck="false" />
+            </div>
+            <!-- Material Grid -->
+            <div class="materials-grid" id="materials-grid">
+              <!-- Material cards populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rich Hover Tooltip -->
+    <div id="item-tooltip" class="item-tooltip" style="display: none;"></div>
+
+    <!-- Scripts -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
