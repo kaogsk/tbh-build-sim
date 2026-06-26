@@ -134,6 +134,9 @@ const TRANSLATIONS = {
     stats_LightningResistance: "Lightning Resistance",
     stats_ChaosResistance: "Chaos Resistance",
     stats_DamageReduction: "Damage Reduction",
+    stats_DamageAbsorption: "Damage Absorption",
+    stats_SkillDurationIncrease: "Skill Duration",
+    stats_SkillRangeExpansion: "Skill Range",
     stats_AdditionalGold: "Additional Gold Gain",
     stats_AdditionalExp: "Additional Experience Gain",
     // Rarity names
@@ -228,6 +231,9 @@ const TRANSLATIONS = {
     stats_LightningResistance: "Resistência a Raio",
     stats_ChaosResistance: "Resistência a Caos",
     stats_DamageReduction: "Redução de Dano",
+    stats_DamageAbsorption: "Absorção de Dano",
+    stats_SkillDurationIncrease: "Duração de Habilidade",
+    stats_SkillRangeExpansion: "Alcance de Habilidade",
     stats_AdditionalGold: "Ganho de Ouro Adicional",
     stats_AdditionalExp: "Ganho de Experiência Adicional",
     // Rarity names
@@ -635,7 +641,7 @@ function renderHeroSelector() {
       ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === hKey)
       : null;
     const heroName = heroInfo
-      ? (heroInfo.name || heroInfo.Name || (heroInfo.name_key && heroInfo.name_key[langKey]) || `Hero ${hKey}`)
+      ? (heroInfo.HeroNameKey_i18n && heroInfo.HeroNameKey_i18n[langKey]) || heroInfo.ClassType || `Hero ${hKey}`
       : `Hero ${hKey}`;
     const option = document.createElement('option');
     option.value = hKey;
@@ -1422,7 +1428,7 @@ function calculateAndRender() {
       ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === simulatedSave.hero.heroKey)
       : null;
     charNameEl.innerText = hInfo
-      ? (hInfo.name || hInfo.Name || (hInfo.name_key && hInfo.name_key[langKey2]) || `Hero ${simulatedSave.hero.heroKey}`)
+      ? (hInfo.HeroNameKey_i18n && hInfo.HeroNameKey_i18n[langKey2]) || hInfo.ClassType || `Hero ${simulatedSave.hero.heroKey}`
       : `Hero ${simulatedSave.hero.heroKey}`;
   }
   
@@ -1515,8 +1521,17 @@ function calculateAndRender() {
     let displaySim = formatCalcValue(sVal, stat.isPercent);
     
     if (stat.key === 'AttackSpeed') {
-      const flatOrig = (1.4973 * oVal / 100).toFixed(2);
-      const flatSim = (1.4973 * sVal / 100).toFixed(2);
+      const heroInfo = wiki_db && wiki_db['/data/heroes.json']
+        ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === simulatedSave.hero.heroKey)
+        : null;
+      let divisor = 100;
+      if (heroInfo) {
+        if (heroInfo.MainWeaponGearType === 'BOW') divisor = 130;
+        else if (heroInfo.MainWeaponGearType === 'CROSSBOW') divisor = 104;
+        else if (heroInfo.MainWeaponGearType === 'STAFF') divisor = 105;
+      }
+      const flatOrig = (oVal / divisor).toFixed(2);
+      const flatSim = (sVal / divisor).toFixed(2);
       displayOrig = `${displayOrig} (${flatOrig}/s)`;
       displaySim = `${displaySim} (${flatSim}/s)`;
     }
@@ -1562,6 +1577,9 @@ function calculateAndRender() {
     { key: 'LightningResistance', label: TRANSLATIONS[activeLanguage].stats_LightningResistance || 'Lightning Resistance', isPercent: false },
     { key: 'ChaosResistance', label: TRANSLATIONS[activeLanguage].stats_ChaosResistance || 'Chaos Resistance', isPercent: false },
     { key: 'DamageReduction', label: TRANSLATIONS[activeLanguage].stats_DamageReduction || 'Damage Reduction', isPercent: true },
+    { key: 'DamageAbsorption', label: TRANSLATIONS[activeLanguage].stats_DamageAbsorption || 'Damage Absorption', isPercent: false },
+    { key: 'SkillDurationIncrease', label: TRANSLATIONS[activeLanguage].stats_SkillDurationIncrease || 'Skill Duration', isPercent: true },
+    { key: 'SkillRangeExpansion', label: TRANSLATIONS[activeLanguage].stats_SkillRangeExpansion || 'Skill Range', isPercent: false },
     { key: 'AdditionalGold', label: TRANSLATIONS[activeLanguage].stats_AdditionalGold || 'Additional Gold', isPercent: true },
     { key: 'AdditionalExp', label: TRANSLATIONS[activeLanguage].stats_AdditionalExp || 'Additional Exp', isPercent: true }
   ];
@@ -1643,6 +1661,9 @@ function calculateFinalStats(saveState) {
     LightningResistance: { flat: 0, additive: 0 },
     ChaosResistance: { flat: 0, additive: 0 },
     DamageReduction: { flat: 0, additive: 0 },
+    DamageAbsorption: { flat: 0, additive: 0 },
+    SkillDurationIncrease: { flat: 0, additive: 0 },
+    SkillRangeExpansion: { flat: 0, additive: 0 },
     AdditionalGold: { flat: 0, additive: 0 },
     AdditionalExp: { flat: 0, additive: 0 }
   };
@@ -1650,6 +1671,12 @@ function calculateFinalStats(saveState) {
   // Add level-up attack speed bonus (0.02% per level)
   if (ranger && ranger.HeroLevel) {
     rawStats.AttackSpeed.additive += ranger.HeroLevel * 0.2;
+  }
+  
+  // Add unspent ability points bonus (+0.15 flat AD and +0.2% additive AD per unspent point)
+  if (ranger && ranger.AbilityPoint) {
+    rawStats.AttackDamage.flat += ranger.AbilityPoint * 0.15;
+    rawStats.AttackDamage.additive += ranger.AbilityPoint * 2; // stored * 10
   }
   
   // 1. Process equipped gear items
@@ -1700,29 +1727,20 @@ function calculateFinalStats(saveState) {
   });
   
   // 2. Process passive attributes levels
+  const passiveSkills = wiki_db && wiki_db['/data/passive_skills.json'] ? wiki_db['/data/passive_skills.json'] : [];
   saveState.attributes.forEach(attr => {
     const heroInfo = wiki_db['/data/heroes.json'].find(h => h.HeroKey === saveState.hero.heroKey);
     const attrInfo = heroInfo ? heroInfo.attributes.find(a => a.key === attr.Key) : null;
     
     if (attrInfo && attrInfo.type === 'PASSIVESKILL' && attr.Level > 0) {
-      const pass = attrInfo.passive;
-      const val = parseInt(pass.value.replace('+', '').replace('-', ''));
+      const pSkill = passiveSkills.find(p => p.PassiveSkillKey === attr.Key);
+      
+      const statName = pSkill ? pSkill.STATTYPE : attrInfo.passive.stat;
+      const modType = pSkill ? pSkill.MODTYPE : (attrInfo.passive.stat.endsWith('Percent') ? 'ADDITIVE' : 'FLAT');
+      const val = pSkill ? pSkill.Value : parseInt(attrInfo.passive.value.replace('+', '').replace('-', ''));
       const totalVal = val * attr.Level;
       
-      const isPercent = pass.stat.endsWith('Percent') || 
-                        pass.stat.indexOf('Chance') !== -1 || 
-                        pass.stat.indexOf('Speed') !== -1 || 
-                        pass.stat.indexOf('Leech') !== -1 || 
-                        pass.stat.indexOf('Reduction') !== -1 ||
-                        pass.stat.indexOf('Resistance') !== -1 ||
-                        pass.stat.indexOf('Damage') !== -1;
-      
-      if (pass.stat === 'AttackDamage' && pass.value === '+1') {
-        addStatValue(rawStats, 'AttackDamage', totalVal, 'FLAT');
-      } else {
-        const modType = isPercent ? 'ADDITIVE' : 'FLAT';
-        addStatValue(rawStats, pass.stat, totalVal, modType);
-      }
+      addStatValue(rawStats, statName, totalVal, modType);
     }
   });
 
@@ -1784,26 +1802,22 @@ function calculateFinalStats(saveState) {
   // Final display: total % including base
   finalStats.AttackSpeed = rawStats.AttackSpeed.flat + rawStats.AttackSpeed.additive / 10;
   
-  // For DPS calculation, we use effective attack damage which includes physical, elemental and projectile damage % bonuses
-  const physicalBonus = (rawStats.PhysicalDamagePercent.flat + rawStats.PhysicalDamagePercent.additive);
-  const elementalBonus = (rawStats.FireDamagePercent.flat + rawStats.FireDamagePercent.additive) +
-                         (rawStats.ColdDamagePercent.flat + rawStats.ColdDamagePercent.additive) +
-                         (rawStats.LightningDamagePercent.flat + rawStats.LightningDamagePercent.additive) +
-                         (rawStats.ChaosDamagePercent.flat + rawStats.ChaosDamagePercent.additive);
-  const projectileBonus = (rawStats.IncreaseProjectileDamage.flat + rawStats.IncreaseProjectileDamage.additive);
-  
-  const effectiveAdditive = rawStats.AttackDamage.additive + physicalBonus + elementalBonus + projectileBonus;
-  const effectiveAttackDamage = rawStats.AttackDamage.flat * (1 + effectiveAdditive / 1000);
-
-  // Basic Attack DPS = EffectiveAttackDamage * (AttackSpeed / divisor)
-  // Bow has a base animation speed divisor of 130 instead of 100
-  const divisor = (heroInfo && heroInfo.MainWeaponGearType === 'BOW') ? 130 : 100;
-  finalStats.BasicAttackDPS = effectiveAttackDamage * (finalStats.AttackSpeed / divisor);
-
   finalStats.CastSpeed = rawStats.CastSpeed.flat + rawStats.CastSpeed.additive / 10;
-  
   finalStats.CriticalChance = (rawStats.CriticalChance.flat / 10) * (1 + rawStats.CriticalChance.additive / 1000);
   finalStats.CriticalDamage = (rawStats.CriticalDamage.flat + rawStats.CriticalDamage.additive) / 10;
+
+  // Basic Attack DPS = AttackDamage * (AttackSpeed / divisor) * CriticalHitMultiplier
+  // divisor is 130 for Bow, 104 for Crossbow, 105 for Staff, 100 for others
+  let divisor = 100;
+  if (heroInfo) {
+    if (heroInfo.MainWeaponGearType === 'BOW') divisor = 130;
+    else if (heroInfo.MainWeaponGearType === 'CROSSBOW') divisor = 104;
+    else if (heroInfo.MainWeaponGearType === 'STAFF') divisor = 105;
+  }
+  const critChance = finalStats.CriticalChance / 100;
+  const critDamageMultiplier = finalStats.CriticalDamage / 100;
+  const critFactor = 1 + critChance * (critDamageMultiplier - 1);
+  finalStats.BasicAttackDPS = finalStats.AttackDamage * (finalStats.AttackSpeed / divisor) * critFactor;
   
   finalStats.MaxHp = rawStats.MaxHp.flat * (1 + rawStats.MaxHp.additive / 1000);
   finalStats.Armor = rawStats.Armor.flat * (1 + rawStats.Armor.additive / 1000);
@@ -1830,6 +1844,9 @@ function calculateFinalStats(saveState) {
   finalStats.ChaosResistance = rawStats.ChaosResistance.flat + rawStats.ChaosResistance.additive;
 
   finalStats.DamageReduction = (rawStats.DamageReduction.flat + rawStats.DamageReduction.additive) / 10;
+  finalStats.DamageAbsorption = rawStats.DamageAbsorption.flat + rawStats.DamageAbsorption.additive;
+  finalStats.SkillDurationIncrease = (rawStats.SkillDurationIncrease.flat + rawStats.SkillDurationIncrease.additive) / 10;
+  finalStats.SkillRangeExpansion = rawStats.SkillRangeExpansion.flat + rawStats.SkillRangeExpansion.additive / 10;
   finalStats.AdditionalGold = (rawStats.AdditionalGold.flat + rawStats.AdditionalGold.additive) / 10;
   finalStats.AdditionalExp = (rawStats.AdditionalExp.flat + rawStats.AdditionalExp.additive) / 10;
 
@@ -1850,6 +1867,7 @@ function addStatValue(rawStats, type, val, modType) {
   if (type === 'IncreaseGoldAmount') targetType = 'AdditionalGold';
   if (type === 'IncreaseExpAmount') targetType = 'AdditionalExp';
   if (type === 'HealthRegen') targetType = 'HpRegenPerSec';
+  if (type === 'AreaOfEffect') targetType = 'IncreaseAreaOfEffectDamage';
   
   // Elemental/physical damage % — accumulate into their own bucket
   // The wiki uses MODTYPE=FLAT for these, but they are percentage bonuses (value 500 = +50%)
@@ -1886,7 +1904,7 @@ function addStatValue(rawStats, type, val, modType) {
   if (!rawStats[targetType]) return; // ignore unmapped stats
   
   const mod = (modType || '').toUpperCase();
-  if (mod === 'ADDITIVE') {
+  if (mod === 'ADDITIVE' || mod === 'MULTIPLICATIVE') {
     rawStats[targetType].additive += numVal;
   } else {
     rawStats[targetType].flat += numVal;
