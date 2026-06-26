@@ -324,7 +324,7 @@ code {
 
 .stats-header-row {
   display: grid;
-  grid-template-columns: 1fr 80px 80px;
+  grid-template-columns: 1fr 110px 110px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   font-size: 11px;
@@ -340,7 +340,7 @@ code {
 
 .stat-row {
   display: grid;
-  grid-template-columns: 1fr 80px 80px;
+  grid-template-columns: 1fr 110px 110px;
   padding: 8px 12px;
   font-size: 13px;
   border-bottom: 1px solid rgba(43, 50, 71, 0.4);

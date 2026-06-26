@@ -1416,8 +1416,8 @@ function calculateAndRender() {
     let displaySim = formatCalcValue(sVal, stat.isPercent);
     
     if (stat.key === 'AttackSpeed') {
-      const flatOrig = (1.504 * oVal / 100).toFixed(2);
-      const flatSim = (1.504 * sVal / 100).toFixed(2);
+      const flatOrig = (1.4973 * oVal / 100).toFixed(2);
+      const flatSim = (1.4973 * sVal / 100).toFixed(2);
       displayOrig = `${displayOrig} (${flatOrig}/s)`;
       displaySim = `${displaySim} (${flatSim}/s)`;
     }
@@ -1547,6 +1547,11 @@ function calculateFinalStats(saveState) {
     AdditionalGold: { flat: 0, additive: 0 },
     AdditionalExp: { flat: 0, additive: 0 }
   };
+  
+  // Add level-up attack speed bonus (0.02% per level)
+  if (ranger && ranger.HeroLevel) {
+    rawStats.AttackSpeed.additive += ranger.HeroLevel * 0.2;
+  }
   
   // 1. Process equipped gear items
   saveState.equipped_items.forEach(item => {
