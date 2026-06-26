@@ -847,7 +847,8 @@ function showModal(socketIndex, socketType) {
     }
   });
   
-  document.getElementById('modal-title').innerText = `${TRANSLATIONS[activeLanguage].selectMaterialTitle || "Select Socket Material"} (${socketType})`;
+  const translatedType = TRANSLATIONS[activeLanguage][socketType.toLowerCase()] || socketType;
+  document.getElementById('modal-title').innerText = `${TRANSLATIONS[activeLanguage].selectMaterialTitle || "Select Socket Material"} (${translatedType})`;
   
   // Clear search box on open
   const searchInput = document.getElementById('modal-search-input');
@@ -1057,7 +1058,7 @@ function renderMaterialsGrid(typeFilter) {
     card.addEventListener('click', () => selectMaterialForActiveSocket(mat.ItemKey));
     
     const name = item.name[langKey] || item.name['en-US'];
-    const typeLabel = TRANSLATIONS[activeLanguage][mat.MATERIALTYPE] || mat.MATERIALTYPE;
+    const typeLabel = TRANSLATIONS[activeLanguage][mat.MATERIALTYPE.toLowerCase()] || mat.MATERIALTYPE;
     
     const possibleStats = getPossibleStats(mat.ItemKey, gearGroup);
     const descLines = possibleStats.map(st => {
