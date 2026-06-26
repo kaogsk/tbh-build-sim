@@ -1416,8 +1416,8 @@ function calculateAndRender() {
     let displaySim = formatCalcValue(sVal, stat.isPercent);
     
     if (stat.key === 'AttackSpeed') {
-      const flatOrig = (1.5 * oVal / 100).toFixed(2);
-      const flatSim = (1.5 * sVal / 100).toFixed(2);
+      const flatOrig = (1.504 * oVal / 100).toFixed(2);
+      const flatSim = (1.504 * sVal / 100).toFixed(2);
       displayOrig = `${displayOrig} (${flatOrig}/s)`;
       displaySim = `${displaySim} (${flatSim}/s)`;
     }
@@ -1687,7 +1687,7 @@ function calculateFinalStats(saveState) {
 
   finalStats.CastSpeed = rawStats.CastSpeed.flat + rawStats.CastSpeed.additive / 10;
   
-  finalStats.CriticalChance = (rawStats.CriticalChance.flat + rawStats.CriticalChance.additive) / 10;
+  finalStats.CriticalChance = (rawStats.CriticalChance.flat / 10) * (1 + rawStats.CriticalChance.additive / 1000);
   finalStats.CriticalDamage = (rawStats.CriticalDamage.flat + rawStats.CriticalDamage.additive) / 10;
   
   finalStats.MaxHp = rawStats.MaxHp.flat * (1 + rawStats.MaxHp.additive / 1000);
