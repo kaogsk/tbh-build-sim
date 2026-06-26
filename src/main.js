@@ -1680,10 +1680,21 @@ function calculateFinalStats(saveState) {
   // Final display: total % including base
   finalStats.AttackSpeed = rawStats.AttackSpeed.flat + rawStats.AttackSpeed.additive / 10;
   
-  // Basic Attack DPS = AttackDamage * (AttackSpeed / divisor)
+  // For DPS calculation, we use effective attack damage which includes physical, elemental and projectile damage % bonuses
+  const physicalBonus = (rawStats.PhysicalDamagePercent.flat + rawStats.PhysicalDamagePercent.additive);
+  const elementalBonus = (rawStats.FireDamagePercent.flat + rawStats.FireDamagePercent.additive) +
+                         (rawStats.ColdDamagePercent.flat + rawStats.ColdDamagePercent.additive) +
+                         (rawStats.LightningDamagePercent.flat + rawStats.LightningDamagePercent.additive) +
+                         (rawStats.ChaosDamagePercent.flat + rawStats.ChaosDamagePercent.additive);
+  const projectileBonus = (rawStats.IncreaseProjectileDamage.flat + rawStats.IncreaseProjectileDamage.additive);
+  
+  const effectiveAdditive = rawStats.AttackDamage.additive + physicalBonus + elementalBonus + projectileBonus;
+  const effectiveAttackDamage = rawStats.AttackDamage.flat * (1 + effectiveAdditive / 1000);
+
+  // Basic Attack DPS = EffectiveAttackDamage * (AttackSpeed / divisor)
   // Bow has a base animation speed divisor of 130 instead of 100
   const divisor = (heroInfo && heroInfo.MainWeaponGearType === 'BOW') ? 130 : 100;
-  finalStats.BasicAttackDPS = finalStats.AttackDamage * (finalStats.AttackSpeed / divisor);
+  finalStats.BasicAttackDPS = effectiveAttackDamage * (finalStats.AttackSpeed / divisor);
 
   finalStats.CastSpeed = rawStats.CastSpeed.flat + rawStats.CastSpeed.additive / 10;
   
