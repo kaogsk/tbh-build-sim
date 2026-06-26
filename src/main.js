@@ -1415,6 +1415,13 @@ function calculateAndRender() {
     let displayOrig = formatCalcValue(oVal, stat.isPercent);
     let displaySim = formatCalcValue(sVal, stat.isPercent);
     
+    if (stat.key === 'AttackSpeed') {
+      const flatOrig = (1.5 * oVal / 100).toFixed(2);
+      const flatSim = (1.5 * sVal / 100).toFixed(2);
+      displayOrig = `${displayOrig} (${flatOrig}/s)`;
+      displaySim = `${displaySim} (${flatSim}/s)`;
+    }
+    
     const isIncreased = sVal > oVal;
     const isDecreased = sVal < oVal;
     
@@ -1729,9 +1736,9 @@ function addStatValue(rawStats, type, val, modType) {
   if (type === 'IncreaseExpAmount') targetType = 'AdditionalExp';
   if (type === 'HealthRegen') targetType = 'HpRegenPerSec';
   
-  // Elemental/physical damage % — accumulate into their own bucket AND into AttackDamage.additive
+  // Elemental/physical damage % — accumulate into their own bucket
   // The wiki uses MODTYPE=FLAT for these, but they are percentage bonuses (value 500 = +50%)
-  // We keep them in their specific bucket for the stats panel, and also add them to AttackDamage.additive
+  // We keep them in their specific bucket for the stats panel
   if (type === 'PhysicalDamagePercent' || 
       type === 'FireDamagePercent' || 
       type === 'ColdDamagePercent' || 
@@ -1741,17 +1748,14 @@ function addStatValue(rawStats, type, val, modType) {
       // Always accumulate into .flat bucket since MODTYPE is FLAT in wiki
       rawStats[type].flat += numVal;
     }
-    // Also apply to AttackDamage as an additive % bonus
-    targetType = 'AttackDamage';
-    modType = 'ADDITIVE';
+    return;
   }
 
   if (type === 'IncreaseProjectileDamage') {
     if (rawStats[type]) {
       rawStats[type].additive += numVal;
     }
-    targetType = 'AttackDamage';
-    modType = 'ADDITIVE';
+    return;
   }
 
   // Handle AllElementalResistance redirection
