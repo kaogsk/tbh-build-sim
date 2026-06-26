@@ -1224,7 +1224,7 @@ function getPossibleStats(materialKey, gearGroup) {
   const mat = wiki_materials.find(m => m.ItemKey === materialKey);
   if (!mat) return [];
   const groupKey = mat.StatModGroupKey;
-  const groupEntries = wiki_stat_mod_groups.filter(g => g.StatModGroupKey === groupKey && g.GearGroup === gearGroup);
+  const groupEntries = wiki_stat_mod_groups.filter(g => g.StatModGroupKey === groupKey && (g.GearGroup === gearGroup || g.GearGroup === 'COMMON'));
   
   const results = [];
   for (const entry of groupEntries) {
