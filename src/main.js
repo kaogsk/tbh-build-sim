@@ -116,6 +116,7 @@ const TRANSLATIONS = {
     stats_MovementSpeed: "Movement Speed",
     stats_HpLeech: "Life Leech",
     stats_IncreaseProjectileDamage: "Projectile Damage",
+    stats_AreaOfEffect: "Area of Effect",
     stats_IncreaseAreaOfEffectDamage: "AoE Damage",
     stats_PhysicalDamagePercent: "Physical Damage",
     stats_FireDamagePercent: "Fire Damage",
@@ -213,6 +214,7 @@ const TRANSLATIONS = {
     stats_MovementSpeed: "Velocidade de Movimento",
     stats_HpLeech: "Roubo de Vida",
     stats_IncreaseProjectileDamage: "Dano de Projétil",
+    stats_AreaOfEffect: "Área de Efeito",
     stats_IncreaseAreaOfEffectDamage: "Dano de Área",
     stats_PhysicalDamagePercent: "Dano Físico",
     stats_FireDamagePercent: "Dano de Fogo",
@@ -1562,6 +1564,7 @@ function calculateAndRender() {
     { key: 'AddHpPerHit', label: TRANSLATIONS[activeLanguage].stats_AddHpPerHit || 'HP per Hit', isPercent: false },
     { key: 'AddHpPerKill', label: TRANSLATIONS[activeLanguage].stats_AddHpPerKill || 'HP per Kill', isPercent: false },
     { key: 'IncreaseProjectileDamage', label: TRANSLATIONS[activeLanguage].stats_IncreaseProjectileDamage || 'Projectile Damage', isPercent: true },
+    { key: 'AreaOfEffect', label: TRANSLATIONS[activeLanguage].stats_AreaOfEffect || 'Area of Effect', isPercent: true },
     { key: 'IncreaseAreaOfEffectDamage', label: TRANSLATIONS[activeLanguage].stats_IncreaseAreaOfEffectDamage || 'AoE Damage', isPercent: true },
     { key: 'PhysicalDamagePercent', label: TRANSLATIONS[activeLanguage].stats_PhysicalDamagePercent || 'Physical Damage', isPercent: true },
     { key: 'FireDamagePercent', label: TRANSLATIONS[activeLanguage].stats_FireDamagePercent || 'Fire Damage', isPercent: true },
@@ -1639,6 +1642,7 @@ function calculateFinalStats(saveState) {
     MovementSpeed: { flat: heroInfo ? heroInfo.MovementSpeed : 0, additive: 0 },
     HpLeech: { flat: 0, additive: 0 },
     IncreaseProjectileDamage: { flat: 0, additive: 0 },
+    AreaOfEffect: { flat: 0, additive: 0 },
     IncreaseAreaOfEffectDamage: { flat: 0, additive: 0 },
     
     // Detailed stats
@@ -1827,6 +1831,7 @@ function calculateFinalStats(saveState) {
   
   finalStats.HpLeech = (rawStats.HpLeech.flat + rawStats.HpLeech.additive) / 10;
   finalStats.IncreaseProjectileDamage = (rawStats.IncreaseProjectileDamage.flat + rawStats.IncreaseProjectileDamage.additive) / 10;
+  finalStats.AreaOfEffect = (rawStats.AreaOfEffect.flat + rawStats.AreaOfEffect.additive) / 10;
   finalStats.IncreaseAreaOfEffectDamage = (rawStats.IncreaseAreaOfEffectDamage.flat + rawStats.IncreaseAreaOfEffectDamage.additive) / 10;
 
   finalStats.HpRegenPerSec = (rawStats.HpRegenPerSec.flat + rawStats.HpRegenPerSec.additive) / 10;
@@ -1867,7 +1872,6 @@ function addStatValue(rawStats, type, val, modType) {
   if (type === 'IncreaseGoldAmount') targetType = 'AdditionalGold';
   if (type === 'IncreaseExpAmount') targetType = 'AdditionalExp';
   if (type === 'HealthRegen') targetType = 'HpRegenPerSec';
-  if (type === 'AreaOfEffect') targetType = 'IncreaseAreaOfEffectDamage';
   
   // Elemental/physical damage % — accumulate into their own bucket
   // The wiki uses MODTYPE=FLAT for these, but they are percentage bonuses (value 500 = +50%)
