@@ -18,9 +18,12 @@ let activeModalSocketIndex = null; // index in EnchantData
 let activeLanguage = 'en';
 let activeModalMode = 'material'; // 'material' or 'gear'
 
-const SLOT_GEAR_TYPES = {
-  0: 'BOW',
-  1: 'ARROW',
+let currentHeroKey = null;
+let loadedHeroesData = []; // [{hero, equipped_items, attributes}]
+let globalGold = 0;
+let globalRunes = [];
+
+const SLOT_GEAR_TYPES_BASE = {
   2: 'HELMET',
   3: 'ARMOR',
   4: 'GLOVES',
@@ -30,6 +33,29 @@ const SLOT_GEAR_TYPES = {
   8: 'RING',
   9: 'BRACER'
 };
+
+function inferOffhandType(mainWeaponType) {
+  const offhandMap = {
+    BOW: 'ARROW',
+    CROSSBOW: 'BOLT',
+    SWORD: 'SHIELD',
+    AXE: 'HATCHET',
+    STAFF: 'ORB',
+    SCEPTER: 'TOME',
+  };
+  return offhandMap[(mainWeaponType || '').toUpperCase()] || 'ARROW';
+}
+
+function getEffectiveSlotGearTypes(heroKey) {
+  const heroInfo = wiki_db && wiki_db['/data/heroes.json']
+    ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === heroKey)
+    : null;
+  return {
+    0: heroInfo ? (heroInfo.MainWeaponGearType || 'BOW') : 'BOW',
+    1: heroInfo ? (heroInfo.OffHandGearType || heroInfo.SubWeaponGearType || inferOffhandType(heroInfo.MainWeaponGearType)) : 'ARROW',
+    ...SLOT_GEAR_TYPES_BASE
+  };
+}
 
 const TRANSLATIONS = {
   en: {
@@ -322,12 +348,21 @@ function setupEventListeners() {
   const dropzone = document.getElementById('upload-dropzone');
   const langSelect = document.getElementById('lang-select');
   const btnChangeItem = document.getElementById('btn-change-item');
+  const heroSelectEl = document.getElementById('hero-select');
   
+  // Hero Select
+  if (heroSelectEl) {
+    heroSelectEl.addEventListener('change', (e) => {
+      switchHero(parseInt(e.target.value));
+    });
+  }
+
   // Language Select
   if (langSelect) {
     langSelect.addEventListener('change', (e) => {
       activeLanguage = e.target.value;
       updateUILanguage();
+      renderHeroSelector();
       calculateAndRender();
       if (selectedSlotIndex !== null) {
         selectSlot(selectedSlotIndex);
@@ -442,44 +477,32 @@ function processFile(file) {
       const parsed = JSON.parse(decryptedText);
       const playerSaveVal = parsed.PlayerSaveData.value.replace(/(:\s*|\[\s*|,\s*)(\d{16,20})\b/g, '$1"$2"');
       const playerSave = JSON.parse(playerSaveVal);
-      
-      // Find Ranger (key 201)
-      const ranger = playerSave.heroSaveDatas.find(h => h.heroKey === 201);
-      if (!ranger) {
-        alert("Ranger character (Key 201) not found in the save file!");
+
+      // Extract all unlocked heroes
+      const allHeroes = (playerSave.heroSaveDatas || []).filter(h => h.IsUnLock);
+      if (allHeroes.length === 0) {
+        alert("No unlocked heroes found in the save file!");
         return;
       }
-      
-      // Extract equipped items
-      const uids = new Set(ranger.equippedItemIds.map(id => String(id)));
-      const equippedItems = playerSave.itemSaveDatas.filter(item => uids.has(String(item.UniqueId)));
-      
-      // Extract Ranger attributes
-      const rangerAttrs = playerSave.attributeSaveDatas.filter(attr => strStartsWith(attr.Key, '201'));
-      
-      // Extract rune levels (global, not per-hero)
-      const runeSaveData = playerSave.RuneSaveData || [];
-      
-      // Extract gold
-      const goldObj = playerSave.currenySaveDatas.find(c => c.Key === 100001);
-      const gold = goldObj ? goldObj.Quantity : 0;
-      
-      currentSave = {
-        ranger,
-        equipped_items: equippedItems,
-        attributes: rangerAttrs,
-        runes: runeSaveData,
-        gold
-      };
-      
-      simulatedSave = JSON.parse(JSON.stringify(currentSave));
-      
-      // Hide upload zone and show dashboard
+
+      globalRunes = playerSave.RuneSaveData || [];
+      const goldObj = (playerSave.currenySaveDatas || []).find(c => c.Key === 100001);
+      globalGold = goldObj ? goldObj.Quantity : 0;
+
+      loadedHeroesData = allHeroes.map(hero => {
+        const uids = new Set(hero.equippedItemIds.map(id => String(id)));
+        const equippedItems = (playerSave.itemSaveDatas || []).filter(item => uids.has(String(item.UniqueId)));
+        const heroPrefix = String(hero.heroKey);
+        const heroAttrs = (playerSave.attributeSaveDatas || []).filter(attr => strStartsWith(attr.Key, heroPrefix));
+        return { hero, equipped_items: equippedItems, attributes: heroAttrs };
+      });
+
       document.getElementById('upload-dropzone').style.display = 'none';
       document.getElementById('dashboard').style.display = 'grid';
-      
-      calculateAndRender();
-      console.log("Save loaded successfully!", currentSave);
+
+      renderHeroSelector();
+      switchHero(loadedHeroesData[0].hero.heroKey);
+      console.log("Save loaded successfully!", loadedHeroesData);
     } catch (err) {
       console.error(err);
       alert("Failed to decrypt save file! Ensure it is a valid TaskbarHero SaveFile_Live.es3.");
@@ -495,15 +518,24 @@ async function loadDemoSave() {
     const text = await res.text();
     const sanitizedText = text.replace(/(:\s*|\[\s*|,\s*)(\d{16,20})\b/g, '$1"$2"');
     const demo = JSON.parse(sanitizedText);
-    
-    currentSave = demo;
-    simulatedSave = JSON.parse(JSON.stringify(currentSave));
-    
+
+    // Support both legacy {ranger:...} format and {hero:...} format
+    const heroData = demo.hero || demo.ranger;
+    globalGold = demo.gold || 0;
+    globalRunes = demo.runes || [];
+
+    loadedHeroesData = [{
+      hero: heroData,
+      equipped_items: demo.equipped_items || [],
+      attributes: demo.attributes || []
+    }];
+
     document.getElementById('upload-dropzone').style.display = 'none';
     document.getElementById('dashboard').style.display = 'grid';
-    
-    calculateAndRender();
-    console.log("Demo save loaded successfully!", currentSave);
+
+    renderHeroSelector();
+    switchHero(heroData.heroKey);
+    console.log("Demo save loaded successfully!", loadedHeroesData);
   } catch (err) {
     console.error("Failed to load demo save:", err);
     alert("Failed to load demo save file!");
@@ -560,6 +592,59 @@ async function decryptES3(arrayBuffer, password) {
 // Helper: Starts with string check
 function strStartsWith(val, prefix) {
   return String(val).indexOf(prefix) === 0;
+}
+
+// Switch active hero
+function switchHero(heroKey) {
+  const heroData = loadedHeroesData.find(hd => hd.hero.heroKey === heroKey);
+  if (!heroData) return;
+
+  currentHeroKey = heroKey;
+
+  currentSave = {
+    hero: heroData.hero,
+    equipped_items: heroData.equipped_items,
+    attributes: heroData.attributes,
+    runes: globalRunes,
+    gold: globalGold
+  };
+
+  simulatedSave = JSON.parse(JSON.stringify(currentSave));
+  selectedSlotIndex = null;
+
+  document.getElementById('no-selection-msg').style.display = 'flex';
+  document.getElementById('item-detail-view').style.display = 'none';
+
+  // Sync hero-select value
+  const selectEl = document.getElementById('hero-select');
+  if (selectEl) selectEl.value = heroKey;
+
+  calculateAndRender();
+}
+
+// Render hero selector dropdown
+function renderHeroSelector() {
+  const selectEl = document.getElementById('hero-select');
+  if (!selectEl) return;
+  const langKey = activeLanguage === 'pt' ? 'pt-BR' : 'en-US';
+
+  selectEl.innerHTML = '';
+  loadedHeroesData.forEach(hd => {
+    const hKey = hd.hero.heroKey;
+    const heroInfo = wiki_db && wiki_db['/data/heroes.json']
+      ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === hKey)
+      : null;
+    const heroName = heroInfo
+      ? (heroInfo.name || heroInfo.Name || (heroInfo.name_key && heroInfo.name_key[langKey]) || `Hero ${hKey}`)
+      : `Hero ${hKey}`;
+    const option = document.createElement('option');
+    option.value = hKey;
+    option.textContent = `${heroName} (Lvl ${hd.hero.HeroLevel || 1})`;
+    if (hKey === currentHeroKey) option.selected = true;
+    selectEl.appendChild(option);
+  });
+
+  selectEl.style.display = loadedHeroesData.length > 0 ? '' : 'none';
 }
 
 // Gear socket limits based on grade
@@ -636,7 +721,7 @@ function selectSlot(index) {
   document.getElementById(`slot-${index}`).classList.add('active');
   
   // Get slot uid
-  const uid = simulatedSave.ranger.equippedItemIds[index];
+  const uid = simulatedSave.hero.equippedItemIds[index];
   if (uid === 0 || uid === '0' || !uid) {
     document.getElementById('no-selection-msg').style.display = 'flex';
     document.getElementById('item-detail-view').style.display = 'none';
@@ -894,7 +979,7 @@ function renderGearGrid() {
   const grid = document.getElementById('materials-grid');
   grid.innerHTML = '';
   
-  const slotGearType = SLOT_GEAR_TYPES[selectedSlotIndex];
+  const slotGearType = getEffectiveSlotGearTypes(currentHeroKey)[selectedSlotIndex];
   if (!slotGearType) return;
   
   const searchQuery = normalizeStr(document.getElementById('modal-search-input')?.value || '');
@@ -961,7 +1046,7 @@ function equipGearForActiveSlot(item) {
   if (selectedSlotIndex === null) return;
   
   if (!item) {
-    simulatedSave.ranger.equippedItemIds[selectedSlotIndex] = 0;
+    simulatedSave.hero.equippedItemIds[selectedSlotIndex] = 0;
   } else {
     const simulatedUniqueId = String(Date.now() + Math.floor(Math.random() * 1000000));
     
@@ -987,7 +1072,7 @@ function equipGearForActiveSlot(item) {
     };
     
     simulatedSave.equipped_items.push(newGear);
-    simulatedSave.ranger.equippedItemIds[selectedSlotIndex] = simulatedUniqueId;
+    simulatedSave.hero.equippedItemIds[selectedSlotIndex] = simulatedUniqueId;
   }
   
   hideModal();
@@ -1016,7 +1101,7 @@ function renderMaterialsGrid(typeFilter) {
       
       // Match by possible socketed attributes in currently selected gear slot
       if (selectedSlotIndex !== null) {
-        const equippedUid = simulatedSave.ranger.equippedItemIds[selectedSlotIndex];
+        const equippedUid = simulatedSave.hero.equippedItemIds[selectedSlotIndex];
         const equippedItem = simulatedSave.equipped_items.find(it => String(it.UniqueId) === String(equippedUid));
         if (equippedItem) {
           const wEquipped = wiki_items[equippedItem.ItemKey];
@@ -1040,7 +1125,7 @@ function renderMaterialsGrid(typeFilter) {
   
   let gearGroup = '';
   if (selectedSlotIndex !== null) {
-    const equippedUid = simulatedSave.ranger.equippedItemIds[selectedSlotIndex];
+    const equippedUid = simulatedSave.hero.equippedItemIds[selectedSlotIndex];
     const equippedItem = simulatedSave.equipped_items.find(it => String(it.UniqueId) === String(equippedUid));
     if (equippedItem) {
       const wEquipped = wiki_items[equippedItem.ItemKey];
@@ -1092,7 +1177,7 @@ function renderMaterialsGrid(typeFilter) {
 function selectMaterialForActiveSocket(materialKey) {
   if (activeModalSocketIndex === null || selectedSlotIndex === null) return;
   
-  const uid = simulatedSave.ranger.equippedItemIds[selectedSlotIndex];
+  const uid = simulatedSave.hero.equippedItemIds[selectedSlotIndex];
   const item = simulatedSave.equipped_items.find(it => String(it.UniqueId) === String(uid));
   if (!item) return;
   
@@ -1164,7 +1249,7 @@ Enter number (1-${possibleStats.length}):`;
 function clearSocket(socketIndex) {
   if (selectedSlotIndex === null) return;
   
-  const uid = simulatedSave.ranger.equippedItemIds[selectedSlotIndex];
+  const uid = simulatedSave.hero.equippedItemIds[selectedSlotIndex];
   const item = simulatedSave.equipped_items.find(it => String(it.UniqueId) === String(uid));
   if (!item) return;
   
@@ -1186,7 +1271,7 @@ function clearSocket(socketIndex) {
 function updateSocketValue(socketIndex, newValue) {
   if (selectedSlotIndex === null) return;
   
-  const uid = simulatedSave.ranger.equippedItemIds[selectedSlotIndex];
+  const uid = simulatedSave.hero.equippedItemIds[selectedSlotIndex];
   const item = simulatedSave.equipped_items.find(it => String(it.UniqueId) === String(uid));
   if (!item) return;
   
@@ -1324,12 +1409,26 @@ function calculateAndRender() {
   if (!currentSave || !simulatedSave) return;
   const langKey = activeLanguage === 'pt' ? 'pt-BR' : 'en-US';
   
-  // 1. Render currencies
+  // 1. Render currencies and hero info
   document.getElementById('currency-gold').innerText = simulatedSave.gold.toLocaleString();
+
+  const charLevelEl = document.getElementById('char-level');
+  if (charLevelEl) charLevelEl.innerText = `Lvl ${simulatedSave.hero.HeroLevel || 1}`;
+
+  const charNameEl = document.getElementById('char-name');
+  if (charNameEl) {
+    const langKey2 = activeLanguage === 'pt' ? 'pt-BR' : 'en-US';
+    const hInfo = wiki_db && wiki_db['/data/heroes.json']
+      ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === simulatedSave.hero.heroKey)
+      : null;
+    charNameEl.innerText = hInfo
+      ? (hInfo.name || hInfo.Name || (hInfo.name_key && hInfo.name_key[langKey2]) || `Hero ${simulatedSave.hero.heroKey}`)
+      : `Hero ${simulatedSave.hero.heroKey}`;
+  }
   
   // 2. Render gear slots
   GEAR_SLOTS.forEach(slotInfo => {
-    const uid = simulatedSave.ranger.equippedItemIds[slotInfo.id];
+    const uid = simulatedSave.hero.equippedItemIds[slotInfo.id];
     const slotEl = document.getElementById(`slot-${slotInfo.id}`);
     
     // Reset classes except standard ones
@@ -1503,7 +1602,7 @@ function formatCalcValue(val, isPercent) {
 
 // Core Stat Calculator Engine
 function calculateFinalStats(saveState) {
-  const ranger = saveState.ranger;
+  const ranger = saveState.hero;
   const heroInfo = wiki_db && wiki_db['/data/heroes.json'] 
     ? wiki_db['/data/heroes.json'].find(h => h.HeroKey === ranger.heroKey) 
     : null;
@@ -1556,7 +1655,7 @@ function calculateFinalStats(saveState) {
   // 1. Process equipped gear items
   saveState.equipped_items.forEach(item => {
     // Make sure we only process items currently mapped in Ranger's equipped slots
-    const isEquipped = saveState.ranger.equippedItemIds.some(id => String(id) === String(item.UniqueId));
+    const isEquipped = saveState.hero.equippedItemIds.some(id => String(id) === String(item.UniqueId));
     if (!isEquipped) return;
 
     const wItem = wiki_items[item.ItemKey];
@@ -1602,7 +1701,7 @@ function calculateFinalStats(saveState) {
   
   // 2. Process passive attributes levels
   saveState.attributes.forEach(attr => {
-    const heroInfo = wiki_db['/data/heroes.json'].find(h => h.HeroKey === 201);
+    const heroInfo = wiki_db['/data/heroes.json'].find(h => h.HeroKey === saveState.hero.heroKey);
     const attrInfo = heroInfo ? heroInfo.attributes.find(a => a.key === attr.Key) : null;
     
     if (attrInfo && attrInfo.type === 'PASSIVESKILL' && attr.Level > 0) {
@@ -1799,7 +1898,7 @@ function showGearTooltip(index, event) {
   const tooltip = document.getElementById('item-tooltip');
   if (!tooltip || !simulatedSave) return;
   
-  const uid = simulatedSave.ranger.equippedItemIds[index];
+  const uid = simulatedSave.hero.equippedItemIds[index];
   if (uid === 0 || uid === '0' || !uid) {
     tooltip.style.display = 'none';
     return;
