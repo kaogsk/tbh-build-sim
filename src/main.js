@@ -1037,6 +1037,16 @@ function renderMaterialsGrid(typeFilter) {
     return true;
   });
   
+  let gearGroup = '';
+  if (selectedSlotIndex !== null) {
+    const equippedUid = simulatedSave.ranger.equippedItemIds[selectedSlotIndex];
+    const equippedItem = simulatedSave.equipped_items.find(it => String(it.UniqueId) === String(equippedUid));
+    if (equippedItem) {
+      const wEquipped = wiki_items[equippedItem.ItemKey];
+      gearGroup = getGearGroup(wEquipped ? wEquipped.gear : '');
+    }
+  }
+
   filtered.forEach(mat => {
     const item = wiki_items[mat.ItemKey];
     if (!item) return;
@@ -1049,11 +1059,27 @@ function renderMaterialsGrid(typeFilter) {
     const name = item.name[langKey] || item.name['en-US'];
     const typeLabel = TRANSLATIONS[activeLanguage][mat.MATERIALTYPE] || mat.MATERIALTYPE;
     
+    const possibleStats = getPossibleStats(mat.ItemKey, gearGroup);
+    const descLines = possibleStats.map(st => {
+      const statName = formatStatName(st.STATTYPE);
+      const minVal = formatStatValue(st.STATTYPE, st.MinValue, st.MODTYPE);
+      const maxVal = formatStatValue(st.STATTYPE, st.MaxValue, st.MODTYPE);
+      return `${statName} (${minVal} ~ ${maxVal})`;
+    });
+
+    const descHtml = descLines.length > 0 
+      ? descLines.map(line => `<span class="mat-desc">${line}</span>`).join('') 
+      : '';
+    const descTitle = descLines.length > 0 ? descLines.join('\n') : '';
+
+    card.setAttribute('title', descTitle ? `${name}\n${descTitle}` : name);
+
     card.innerHTML = `
       <div class="mat-icon-container">
         <img class="mat-icon" src="${getImageUrl(item.icon)}" alt="" style="image-rendering: pixelated;" />
       </div>
       <span class="mat-name">${name}</span>
+      ${descHtml}
       <span class="mat-type">${typeLabel}</span>
     `;
     

@@ -976,6 +976,13 @@ code {
   margin-top: 4px;
 }
 
+.mat-desc {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  line-height: 1.2;
+}
+
 /* Responsive Rules */
 @media (max-width: 1200px) {
   .dashboard {
